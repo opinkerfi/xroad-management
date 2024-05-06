@@ -5,6 +5,7 @@ RED='\033[0;31m'
 ORANGE='\033[38;5;208m'
 YELLOW='\033[1;33m'  # Bright yellow text
 GREEN='\033[0;32m'
+BLUE='\033[0;34m'  # Added blue for IP addresses and ports
 NC='\033[0m' # No Color
 
 # Usage message
@@ -42,7 +43,7 @@ check_running_services() {
         "xroad-proxy"
         "xroad-confclient"
         "xroad-monitor"
-        "xroad-proxy" 
+        "xroad-proxy"
         "xroad-opsmanager"
     )
     for service in "${services[@]}"; do
@@ -56,6 +57,16 @@ check_running_services() {
     done
 }
 
+# Function to perform network configuration checks
+network_configuration_checks() {
+    echo -e "\n${YELLOW}Performing network configuration checks...${NC}"
+
+    # Get the current IP address, gateway, and subnet mask
+    current_ip=$(ip addr show $(ip route show default | awk '/default/ {print $5}') | grep -Po 'inet \K[\d.]+')
+
+    echo -e "Current host IP Address: ${BLUE}$current_ip${NC}"
+}
+
 # Function to perform global health checks
 global_health_checks() {
     echo -e "\n${YELLOW}Performing global health checks...${NC}"
@@ -67,15 +78,25 @@ global_health_checks() {
     # Check FQDN
     echo "Checking FQDN..."
     fqdn=$(hostname -f)
-    if [ $? -eq 0 ]; then
+    fqdn_ip=$(dig +short "$fqdn")
+    current_ip=$(ip addr show $(ip route show default | awk '/default/ {print $5}') | grep -Po 'inet \K[\d.]+')
+
+    if [ $? -eq 0 ] && [ -n "$fqdn_ip" ]; then
         echo -e "${GREEN}FQDN: $fqdn${NC}"
+        echo -e "IP Address from FQDN: ${BLUE}$fqdn_ip${NC}"
+        echo -e "Current host IP Address: ${BLUE}$current_ip${NC}"
+
+        # Verify if the current IP matches the IP from the FQDN
+        if [[ "$current_ip" != "$fqdn_ip" ]]; then
+            echo -e "${RED}Warning: Current IP ($current_ip) and FQDN IP ($fqdn_ip) do not match.${NC}"
+        fi
     else
-        echo -e "${RED}FQDN check failed.${NC}"
+        echo -e "${RED}FQDN check failed or no IP returned.${NC}"
         return
     fi
 
     # DNS lookups
-    echo "Performing forward and reverse DNS lookup for $fqdn..."
+    echo -e "\n${YELLOW}Performing Performing forward and reverse DNS lookup for $fqdn... ${NC}"
     ip_address=$(dig +short "$fqdn")
     if [ -n "$ip_address" ]; then
         echo -e "${GREEN}IP Address for $fqdn: $ip_address${NC}"
@@ -138,4 +159,3 @@ case $environment in
         exit 1
         ;;
 esac
-
